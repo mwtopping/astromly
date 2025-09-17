@@ -81,6 +81,7 @@ class Denoise_Model(nn.Module):
             nn.ConvTranspose2d(32, in_channels, 3, stride=1, padding=1),
             nn.LeakyReLU(0.1))
 
+
     def forward(self, x):
 
         #print("Input", x.shape)

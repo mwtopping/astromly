@@ -1,3 +1,4 @@
+from os import wait
 import torch
 from astropy.visualization import ZScaleInterval
 import numpy as np
@@ -10,6 +11,16 @@ from model import get_model
 
 
 from torch.utils.data import DataLoader
+
+
+def median_binner(a,bin_x,bin_y):
+    m,n = np.shape(a)
+    strided_reshape = np.lib.stride_tricks.as_strided(a,shape=(bin_x,bin_y,m//bin_x,n//bin_y),strides = a.itemsize*np.array([(m // bin_x) * n, (n // bin_y), n, 1]))
+    return np.array([np.median(col) for row in strided_reshape for col in row]).reshape(bin_x,bin_y)
+
+
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters())
 
 
 def calc_loss(inp_batch, targ_batch, model, device):
@@ -61,7 +72,7 @@ def train(model, dataloader, testdataloader, Nepochs, loss_fn, optimizer, device
     test_losses = []
     steps = []
     global_step = -1
-    eval_freq = 50
+    eval_freq = 20
     for ii in tqdm(range(Nepochs)):
         total_loss = 0
         model.train()
@@ -74,7 +85,7 @@ def train(model, dataloader, testdataloader, Nepochs, loss_fn, optimizer, device
             loss.backward()
             optimizer.step()
             if global_step % eval_freq == 0:
-                train_loss, test_loss = evalutae_model(model, dataloader, testdataloader, device, 30)
+                train_loss, test_loss = evalutae_model(model, dataloader, testdataloader, device, 10)
     
                 train_losses.append(train_loss.cpu())
                 test_losses.append(test_loss.cpu())
@@ -88,36 +99,77 @@ def train(model, dataloader, testdataloader, Nepochs, loss_fn, optimizer, device
 
 if __name__ == "__main__":
 
+
+    scaler = ZScaleInterval()
+
     device = get_device()
     data = ImageDataset(device)
+    testdata = ImageDataset(device)
+
+
+    test_img = data.fullimages[1]
+    print(test_img)
 
     dataloader = DataLoader(data, batch_size=16, shuffle=True)
-    testdataloader = DataLoader(data, batch_size=16, shuffle=True)
+    testdataloader = DataLoader(testdata, batch_size=16, shuffle=True)
 
-    data_batch, labels_batch = next(iter(dataloader))
-    print(f"Batch shape: {data_batch.shape}")
-    print(f"Labels shape: {labels_batch.shape}")
+#    data_batch, labels_batch = next(iter(dataloader))
+#    print(f"Batch shape: {data_batch.shape}")
+#    print(f"Labels shape: {labels_batch.shape}")
 
+
+
+    print(f"Creating model on device:{device}")
     model, device = get_model()
+    #model.compile()
 
-    loss_fn = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    train(model, dataloader, testdataloader, 100, loss_fn, optimizer, device=device)
-
+    print(f"Instantiated model with {count_parameters(model)} parameters.")
 
 
+
+    #loss_fn = nn.MSELoss()
+    loss_fn = nn.L1Loss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=4e-5, weight_decay=1e-5)
+
+
+
+    train(model, dataloader, testdataloader, 30, loss_fn, optimizer, device=device)
+
+
+    model.eval()
     data_batch, labels_batch = next(iter(dataloader))
-    scaler = ZScaleInterval()
+
+
+    fig, ax = plt.subplots(1, 2, sharex=True, sharey=True)
+    test_img = data.raw_images[1][:2048, :2048]
+
+    limits = scaler.get_limits(test_img)
+    ax[0].imshow(test_img, vmin=limits[0], vmax=limits[1])
+
+    print(test_img)
+    print(np.shape(test_img))
+    inp_tensor = torch.tensor(test_img).unsqueeze(0).unsqueeze(0).to(device)
+    print(inp_tensor.shape)
+    res = model(inp_tensor)
+
+    limits = scaler.get_limits(res[0,0,:,:].cpu().detach().numpy())
+    ax[1].imshow(res[0,0,:,:].cpu().detach().numpy(), vmin=limits[0], vmax=limits[1])
+    print(res)
+
     for d in data_batch:
         print(d)
         print(d.shape)
         res = model(d.unsqueeze(0))
         print(res)
-        fig, axs = plt.subplots(1, 2, sharex=True, sharey=True)
+        fig, axs = plt.subplots(1, 3)#, sharex=True, sharey=True)
 
         limits = scaler.get_limits(d[0,:,:].cpu().detach().numpy())
         axs[0].imshow(d[0,:,:].cpu().detach().numpy(), vmin=limits[0], vmax=limits[1])
         axs[1].imshow(res[0,0,:,:].cpu().detach().numpy(), vmin=limits[0], vmax=limits[1])
+        outimg = res[0,0,:,:].cpu().detach().numpy()
+
+        out_binned = median_binner(outimg, 64, 64)
+        axs[2].imshow(out_binned, vmin=limits[0], vmax=limits[1])
         plt.show()
 
 
