@@ -132,7 +132,7 @@ def get_star_locs(img, sigma=3, return_image=False, padding=1):
 
     sigma_clip = SigmaClip(sigma=5.0)
     bkg_estimator = MedianBackground()
-    bkg = Background2D(img, (350, 350), filter_size=(3, 3),
+    bkg = Background2D(img, (250, 250), filter_size=(3, 3),
                        sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
 
     img = img - bkg.background

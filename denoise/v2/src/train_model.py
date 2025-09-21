@@ -96,6 +96,8 @@ def train(model, dataloader, testdataloader, Nepochs, loss_fn, optimizer, device
     plt.figure()
     plt.plot(steps, train_losses)
     plt.plot(steps, test_losses)
+    plt.yscale('log')
+    plt.xscale('log')
 
 if __name__ == "__main__":
 
@@ -104,14 +106,14 @@ if __name__ == "__main__":
 
     device = get_device()
     data = ImageDataset(device)
-    testdata = ImageDataset(device)
+    #testdata = ImageDataset(device)
 
 
     test_img = data.fullimages[1]
     print(test_img)
 
     dataloader = DataLoader(data, batch_size=16, shuffle=True)
-    testdataloader = DataLoader(testdata, batch_size=16, shuffle=True)
+    #testdataloader = DataLoader(testdata, batch_size=16, shuffle=True)
 
 #    data_batch, labels_batch = next(iter(dataloader))
 #    print(f"Batch shape: {data_batch.shape}")
@@ -129,11 +131,11 @@ if __name__ == "__main__":
 
     #loss_fn = nn.MSELoss()
     loss_fn = nn.L1Loss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=4e-5, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
 
 
 
-    train(model, dataloader, testdataloader, 30, loss_fn, optimizer, device=device)
+    train(model, dataloader, dataloader, 10, loss_fn, optimizer, device=device)
 
 
     model.eval()
@@ -141,7 +143,7 @@ if __name__ == "__main__":
 
 
     fig, ax = plt.subplots(1, 2, sharex=True, sharey=True)
-    test_img = data.raw_images[1][:2048, :2048]
+    test_img = data.raw_images[1][:640, :640]
 
     limits = scaler.get_limits(test_img)
     ax[0].imshow(test_img, vmin=limits[0], vmax=limits[1])
@@ -152,7 +154,7 @@ if __name__ == "__main__":
     print(inp_tensor.shape)
     res = model(inp_tensor)
 
-    limits = scaler.get_limits(res[0,0,:,:].cpu().detach().numpy())
+#    limits = scaler.get_limits(res[0,0,:,:].cpu().detach().numpy())
     ax[1].imshow(res[0,0,:,:].cpu().detach().numpy(), vmin=limits[0], vmax=limits[1])
     print(res)
 

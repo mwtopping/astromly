@@ -208,5 +208,7 @@ __marimo__/
 
 .DS_Store/
 **/.DS_Store/
+denoise/.DS_Store/
+denoise/v2/.DS_Store/
 denoise/v1/m33/
 denoise/v2/training_data/
