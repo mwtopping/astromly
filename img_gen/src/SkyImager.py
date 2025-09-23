@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 from astropy.visualization import ZScaleInterval
 import numpy as np
 import cv2
+from tqdm import tqdm
 
-
-
-
+from parameters import get_stellar_density, sample_star_mags
+from perlin import perlin_octaves
 
 
 
@@ -16,20 +16,21 @@ class SkyImager:
         self.exposure_cfg = exposure_cfg
 
         self.fill_defaults()
+        self.calculate_other_params()
 
     def fill_defaults(self):
         sensor_cfg_default = {
-            "nx":720,
-            "ny":1024,
-            "pix_size":5.4, #in micron
-            "bias": 1,
+            "nx":976,
+            "ny":1304,
+            "pix_size":3.75, #in micron
+            "bias": 30,
             "dark": 0,
-            "read": 0,
+            "read": 0.8,
         }
 
         optics_cfg_default = {
             "focal_length":12, # in mm
-            "aperture": 20, # in mm
+            "aperture": 8, # in mm
         }
 
         exposure_cfg_default = {
@@ -47,6 +48,15 @@ class SkyImager:
             if key not in self.exposure_cfg:
                 self.exposure_cfg[key] = exposure_cfg_default[key]
 
+    def calculate_other_params(self):
+        self.pixel_scale = self.sensor_cfg["pix_size"] / self.optics_cfg["focal_length"] / 1000 * 206265
+        self.fov_width = self.sensor_cfg["nx"] * self.pixel_scale
+        self.fov_height = self.sensor_cfg["ny"] * self.pixel_scale
+        self.fov_area = self.fov_width * self.fov_height / (206265**2)
+        print(self.fov_area)
+    
+
+
     def __repr__(self):
 
         result = "".join([f"{key}:  {cfg[key]}\n" 
@@ -60,16 +70,34 @@ class SkyImager:
 
         image += self.sensor_cfg["bias"]
 
+        mag_bins, total_star_mags = get_stellar_density()
+        mags = sample_star_mags(mag_bins, total_star_mags, self.fov_area, mag_limit=12)
 
-        for ii in range(40):
-            x = np.random.randint(720)
-            y = np.random.randint(1024)
-            image = add_star(image, (x, y))
-        for ii in range(1000):
-            x = np.random.randint(720)
-            y = np.random.randint(1024)
-            image = add_star(image, (x, y), flux_scale=0.2)
+        xoffset = 2**15*np.random.rand()
+        yoffset = 2**15*np.random.rand()
 
+        noise_scale = 2.0
+
+        for m in tqdm(mags):
+
+            test = np.random.rand()
+            x = np.random.randint(self.sensor_cfg["nx"])
+            y = np.random.randint(self.sensor_cfg["ny"])
+
+            while perlin_octaves(x/self.sensor_cfg["nx"]*noise_scale+xoffset, 
+                                 y/self.sensor_cfg["ny"]*noise_scale+xoffset, 2) > test:
+                test = np.random.rand()
+                x = np.random.randint(self.sensor_cfg["nx"])
+                y = np.random.randint(self.sensor_cfg["ny"])
+
+
+
+
+            image = add_star(image, (x, y), m, flux_scale=200)
+
+    #for ii in range(400):
+    #    for jj in range(400):
+    #        arr[ii][jj] = perlin_octaves(ii/400.0+xoffset, jj/400.0+xoffset, 8)
 
 
         # add noise
@@ -81,13 +109,16 @@ class SkyImager:
 
 def psf_convolve(image):
 
-    image_conv = cv2.GaussianBlur(image, (65, 65), 1, 1)
+    image_conv = cv2.GaussianBlur(image, (65, 65), 0.3, 0.3) # instrument psf
+    image_conv = cv2.GaussianBlur(image, (65, 65), 1.0, 1.0) # seeing
+
     return image_conv
 
 
-def add_star(image, loc, flux_scale=1):
+def add_star(image, loc, m, flux_scale=1):
     cutout_size = 65
-    flux = flux_scale*50*np.random.pareto(1)
+    #flux = flux_scale*50*np.random.pareto(1)
+    flux = flux_scale * 3631 * 10**(-0.4*m)
     star_cutout = np.zeros((cutout_size, cutout_size))
 
     star_cutout[cutout_size //2, cutout_size //2] = flux
